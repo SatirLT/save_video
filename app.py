@@ -18,7 +18,16 @@ COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "cookies.txt")).resolve()
 
 def _base_ydl_opts() -> dict:
     """Common yt-dlp options shared across all calls."""
-    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios,web"],
+            }
+        },
+    }
     if COOKIES_FILE.exists():
         opts["cookiefile"] = str(COOKIES_FILE)
     return opts
