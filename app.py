@@ -24,12 +24,11 @@ def _base_ydl_opts() -> dict:
         "noplaylist": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android,web"],
+                "player_client": ["android"],
             }
         },
     }
-    if COOKIES_FILE.exists():
-        opts["cookiefile"] = str(COOKIES_FILE)
+    # Don't use cookies — they cause android/ios clients to be skipped
     return opts
 
 # In-memory task store: task_id -> {status, progress, filename, error, title}
@@ -73,11 +72,8 @@ def _download(task_id: str, url: str, format_id: str, audio_only: bool):
                     "preferredquality": "192",
                 }
             ]
-        elif format_id:
-            ydl_opts["format"] = format_id
         else:
-            ydl_opts["format"] = "bestvideo+bestaudio/best"
-            ydl_opts["merge_output_format"] = "mp4"
+            ydl_opts["format"] = "best"
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -124,24 +120,20 @@ def video_info():
             info = ydl.extract_info(url, download=False)
 
         formats = []
-        seen_res = set()
         for f in info.get("formats", []):
             if f.get("vcodec", "none") == "none":
                 continue
-            res = f.get("height", 0)
-            if res and res not in seen_res:
-                seen_res.add(res)
-                filesize = f.get("filesize") or f.get("filesize_approx")
-                formats.append(
-                    {
-                        "format_id": f"bestvideo[height<={res}]+bestaudio/best[height<={res}]",
-                        "ext": "mp4",
-                        "resolution": f"{res}p",
-                        "filesize": filesize,
-                        "note": f.get("format_note", ""),
-                    }
-                )
-        formats.sort(key=lambda x: int(x["resolution"].replace("p", "")), reverse=True)
+            res = f.get("resolution", "?")
+            filesize = f.get("filesize") or f.get("filesize_approx")
+            formats.append(
+                {
+                    "format_id": f["format_id"],
+                    "ext": f.get("ext", "?"),
+                    "resolution": res,
+                    "filesize": filesize,
+                    "note": f.get("format_note", ""),
+                }
+            )
 
         return jsonify(
             {
