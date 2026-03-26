@@ -4,9 +4,11 @@ import threading
 from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 import yt_dlp
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "downloads")).resolve()
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Save Video</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
     <div class="container">
@@ -94,7 +94,7 @@
             $("btn-info").textContent = "Загрузка...";
 
             try {
-                const res = await fetch("/api/info", {
+                const res = await fetch("api/info", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ url }),
@@ -143,7 +143,7 @@
             };
 
             try {
-                const res = await fetch("/api/download", {
+                const res = await fetch("api/download", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
@@ -167,7 +167,7 @@
         function pollProgress(taskId) {
             const interval = setInterval(async () => {
                 try {
-                    const res = await fetch(`/api/status/${taskId}`);
+                    const res = await fetch(`api/status/${taskId}`);
                     const data = await res.json();
 
                     $("progress-fill").style.width = data.progress + "%";
@@ -181,7 +181,7 @@
                         $("progress-section").hidden = true;
                         $("done-section").hidden = false;
                         const link = $("download-link");
-                        link.href = `/api/file/${taskId}`;
+                        link.href = `api/file/${taskId}`;
                         link.textContent = `💾 Сохранить: ${data.title || "video"}`;
                         $("btn-download").disabled = false;
                     } else if (data.status === "error") {
