@@ -13,6 +13,16 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "downloads")).resolve()
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+COOKIES_FILE = Path(os.environ.get("COOKIES_FILE", "cookies.txt")).resolve()
+
+
+def _base_ydl_opts() -> dict:
+    """Common yt-dlp options shared across all calls."""
+    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    if COOKIES_FILE.exists():
+        opts["cookiefile"] = str(COOKIES_FILE)
+    return opts
+
 # In-memory task store: task_id -> {status, progress, filename, error, title}
 tasks: dict[str, dict] = {}
 
@@ -39,13 +49,11 @@ def _download(task_id: str, url: str, format_id: str, audio_only: bool):
     try:
         outtmpl = str(DOWNLOAD_DIR / f"{task_id}_%(title)s.%(ext)s")
 
-        ydl_opts: dict = {
+        ydl_opts = _base_ydl_opts()
+        ydl_opts.update({
             "outtmpl": outtmpl,
             "progress_hooks": [ProgressHook(task_id)],
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-        }
+        })
 
         if audio_only:
             ydl_opts["format"] = "bestaudio/best"
@@ -101,7 +109,7 @@ def video_info():
         return jsonify({"error": "URL is required"}), 400
 
     try:
-        ydl_opts = {"quiet": True, "no_warnings": True, "noplaylist": True}
+        ydl_opts = _base_ydl_opts()
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
