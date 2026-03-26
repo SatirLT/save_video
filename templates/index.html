@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Save Video</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📥 Save Video</h1>
+        <p class="subtitle">Вставьте ссылку на видео с YouTube</p>
+
+        <div class="input-group">
+            <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=..." autofocus>
+            <button id="btn-info" onclick="fetchInfo()">Получить инфо</button>
+        </div>
+
+        <div id="error" class="error" hidden></div>
+
+        <div id="video-info" hidden>
+            <div class="video-card">
+                <img id="thumbnail" src="" alt="thumbnail">
+                <div class="video-meta">
+                    <h2 id="title"></h2>
+                    <p id="uploader"></p>
+                    <p id="duration"></p>
+                </div>
+            </div>
+
+            <div class="options">
+                <div class="format-group">
+                    <label for="format-select">Формат:</label>
+                    <select id="format-select">
+                        <option value="">Лучшее качество (авто)</option>
+                    </select>
+                </div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="audio-only"> Только аудио (MP3)
+                </label>
+            </div>
+
+            <button id="btn-download" class="btn-download" onclick="startDownload()">
+                Скачать
+            </button>
+        </div>
+
+        <div id="progress-section" hidden>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <p id="progress-text">Подготовка...</p>
+        </div>
+
+        <div id="done-section" hidden>
+            <a id="download-link" class="btn-save" download>💾 Сохранить файл</a>
+        </div>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        function showError(msg) {
+            $("error").textContent = msg;
+            $("error").hidden = false;
+        }
+
+        function hideError() {
+            $("error").hidden = true;
+        }
+
+        function formatDuration(sec) {
+            if (!sec) return "";
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${m}:${String(s).padStart(2, "0")}`;
+        }
+
+        function formatSize(bytes) {
+            if (!bytes) return "";
+            const mb = bytes / (1024 * 1024);
+            return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
+        }
+
+        async function fetchInfo() {
+            const url = $("url").value.trim();
+            if (!url) return;
+
+            hideError();
+            $("video-info").hidden = true;
+            $("done-section").hidden = true;
+            $("progress-section").hidden = true;
+            $("btn-info").disabled = true;
+            $("btn-info").textContent = "Загрузка...";
+
+            try {
+                const res = await fetch("/api/info", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url }),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+
+                $("thumbnail").src = data.thumbnail || "";
+                $("title").textContent = data.title || "Без названия";
+                $("uploader").textContent = data.uploader || "";
+                $("duration").textContent = formatDuration(data.duration);
+
+                const select = $("format-select");
+                select.innerHTML = '<option value="">Лучшее качество (авто)</option>';
+                for (const f of data.formats) {
+                    const size = formatSize(f.filesize);
+                    const label = `${f.resolution} ${f.ext} ${f.note} ${size}`.trim();
+                    select.innerHTML += `<option value="${f.format_id}">${label}</option>`;
+                }
+
+                $("video-info").hidden = false;
+            } catch (e) {
+                showError("Ошибка соединения с сервером");
+            } finally {
+                $("btn-info").disabled = false;
+                $("btn-info").textContent = "Получить инфо";
+            }
+        }
+
+        async function startDownload() {
+            const url = $("url").value.trim();
+            if (!url) return;
+
+            hideError();
+            $("done-section").hidden = true;
+            $("btn-download").disabled = true;
+
+            const body = {
+                url,
+                format_id: $("format-select").value,
+                audio_only: $("audio-only").checked,
+            };
+
+            try {
+                const res = await fetch("/api/download", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    showError(data.error);
+                    $("btn-download").disabled = false;
+                    return;
+                }
+
+                $("progress-section").hidden = false;
+                pollProgress(data.task_id);
+            } catch (e) {
+                showError("Ошибка соединения с сервером");
+                $("btn-download").disabled = false;
+            }
+        }
+
+        function pollProgress(taskId) {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/status/${taskId}`);
+                    const data = await res.json();
+
+                    $("progress-fill").style.width = data.progress + "%";
+
+                    if (data.status === "downloading") {
+                        $("progress-text").textContent = `Скачивание... ${data.progress}%`;
+                    } else if (data.status === "processing") {
+                        $("progress-text").textContent = "Обработка...";
+                    } else if (data.status === "done") {
+                        clearInterval(interval);
+                        $("progress-section").hidden = true;
+                        $("done-section").hidden = false;
+                        const link = $("download-link");
+                        link.href = `/api/file/${taskId}`;
+                        link.textContent = `💾 Сохранить: ${data.title || "video"}`;
+                        $("btn-download").disabled = false;
+                    } else if (data.status === "error") {
+                        clearInterval(interval);
+                        showError(data.error || "Ошибка скачивания");
+                        $("progress-section").hidden = true;
+                        $("btn-download").disabled = false;
+                    }
+                } catch (e) {
+                    clearInterval(interval);
+                    showError("Потеряно соединение с сервером");
+                    $("btn-download").disabled = false;
+                }
+            }, 500);
+        }
+
+        // Enter key triggers fetch
+        $("url").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") fetchInfo();
+        });
+    </script>
+</body>
+</html>
